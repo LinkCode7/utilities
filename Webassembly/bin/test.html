@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Emscripten: Test</title>
+</head>
+<body>
+    <script>
+        Module = {};
+        Module.onRuntimeInitialized = function () {
+            console.log(">>> js call cpp:fibonacci(3) = " + Module._fibonacci(3));
+
+            // JS-CPP交换数据：全局变量地址
+            var int_ptr = Module._getIntPtr();
+            var int_value = Module.HEAP32[int_ptr >> 2];
+            console.log("JS{int_value:" + int_value + "}");
+
+            var bool_ptr = Module._getBoolPtr();
+            var bool_value = Module.HEAP32[bool_ptr >> 2];
+            console.log("JS{bool_value:" + bool_value + "}");
+
+            var double_ptr = Module._getDoublePtr();
+            var double_value = Module.HEAPF64[double_ptr >> 3];
+            console.log("JS{double_value:" + double_value + "}");
+
+            console.log("JS reset value...");
+            Module.HEAP32[int_ptr >> 2] = 13;
+            Module.HEAP32[bool_ptr >> 2] = 0;
+            Module.HEAPF64[double_ptr >> 3] = 12345.678;
+
+            Module._printGlobalValue();
+
+            /*
+             * @brief 通过embind交换数据
+             */
+            // 1
+            var objStruct = Module._getStructObject();
+            var intValue = objStruct.num;
+            var floatValue = objStruct.distance;
+            var strValue = objStruct.name;
+            objStruct.distance = 3.1415926;
+
+            // 2.1
+            var point = Module._getPoint();
+            console.log("JS get CPP struct Point: x = " + point.x + ", y = " + point.y);
+
+            // 2.2
+            var myPoint = new Module.Point(10.1, 10.2);
+            myPoint.multiply(10.0);
+            console.log("JS get CPP struct Point: x = " + myPoint.x + ", y = " + myPoint.y);
+            myPoint.x = 12;
+            myPoint.y = 20;
+            console.log("JS get CPP struct Point: x = " + myPoint.x + ", y = " + myPoint.y);
+            myPoint.delete();
+
+            // 3
+            Module._initTestObject();
+            let objects = Module._getTestObject();
+            console.log(objects);
+            for (var i = 0; i < objects.size(); ++i)
+            {
+                var obj = objects.get(i);
+                console.log("obj.intValue:" + obj.intValue());
+                console.log("obj.doubleValue:" + obj.doubleValue());
+                console.log("obj.stringValue:" + obj.stringValue());
+
+                // 注意：这种类似于函数重载的调用形式可能影响性能，js中似乎不直接支持重载
+                obj.intValue(666); // 错误示范：obj.intValue = 555;这样会修改intValue的源码
+                var ival = obj.intValue(); // 同上
+
+                obj.setDouble(6.66); // 修改C++内存中的数据
+                console.log(">>>afterchange: obj.doubleValue:" + obj.doubleValue());
+                console.log(obj);
+            }
+            Module._printFirstObject(); // 数据已被修改
+
+            // 4
+            var triangle = Module._getTriangleData(1);
+            var vertexs = triangle._vertexs();
+            console.log(vertexs);
+            var strs = triangle._str();
+            console.log(strs);
+            var points = triangle._points();
+            console.log(points);
+            for (var i = 0; i < points.size(); ++i)
+            {
+                console.log("--->points[" + i + "] = {" + points.get(i).x + ", " + points.get(i).y + "}");
+            }
+            triangle.delete();
+        }
+    </script>
+    <script src="./Project.js"></script>
+</body>
+</html>
