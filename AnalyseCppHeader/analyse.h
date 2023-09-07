@@ -6,23 +6,23 @@
 #include <vector>
 
 #include "setting.h"
-enum class FuncLimit
+enum class LimitType
 {
-    ePublic,
-    eProtected,
-    ePrivate,
+    ePublic,    // 公开
+    eProtected, // 保护
+    ePrivate,   // 私有
 };
 
 class FunctionInfo
 {
 public:
-    std::string _funName;
-    std::string _funReturn;
-    std::string _funParams;
-    FuncLimit   _funLimit = FuncLimit::ePrivate;
-    int         _flag     = 0;
+    std::string _name;                        // 函数名
+    std::string _return;                      // 返回值
+    std::string _params;                      // 参数集合
+    LimitType   _limit = LimitType::ePrivate; // 函数权限
+    int         _flag  = 0;                   // 修饰符...
 
-    FunctionInfo(FuncLimit limit) : _funLimit(limit) {}
+    FunctionInfo(LimitType limit) : _limit(limit) {}
 
     enum Flag : unsigned int
     {
@@ -39,17 +39,41 @@ public:
     bool hasFlag(Flag flag) const { return _flag & flag; }
 
     std::string simplifyFun() const;
-    std::string simplifyParams() const; // 获取不带参数名的_funParams
+    std::string simplifyParams() const; // 获取不带参数名的_params
 };
 using FunctionInfoSp = std::shared_ptr<FunctionInfo>;
+
+class VariableInfo
+{
+public:
+    std::string _type;    // 类型
+    std::string _name;    // 名称
+    std::string _default; // 初始化值，如有
+    int         _flag  = 0;
+    LimitType   _limit = LimitType::ePrivate;
+
+    VariableInfo(LimitType limit) : _limit(limit) {}
+
+    enum Flag : unsigned int
+    {
+        eUnknownFlag    = 0,
+        eConstVariable  = 1,
+        eStaticVariable = eConstVariable << 1,
+    };
+    void addFlag(Flag flag) { _flag |= flag; }
+    void removeFlag(Flag flag) { _flag &= (~flag); }
+    bool hasFlag(Flag flag) const { return _flag & flag; }
+};
+using VariableInfoSp = std::shared_ptr<VariableInfo>;
 
 class ClassInfo
 {
 public:
-    std::vector<FunctionInfoSp> _func;
-    std::string                 _className;
+    std::vector<FunctionInfoSp> _func;      // 函数
+    std::vector<VariableInfoSp> _member;    // 成员变量
+    std::string                 _className; // 类名
 
-    void funcNameCount(std::map<std::string, int>& names);
+    void funcNameCount(std::map<std::string, int>& names) const;
 };
 using ClassInfoSp = std::shared_ptr<ClassInfo>;
 
@@ -60,16 +84,17 @@ using ClassInfoSp = std::shared_ptr<ClassInfo>;
  */
 class AnalyseHeader
 {
-    std::string _contents;
-    SettingSp   _setting;
+    std::string                        _contents; // 输入文件
+    SettingSp                          _setting;  // 配置
+    std::map<std::string, std::string> _macro;    // 宏替换，"#define" "#typedef" "using"
 
-    ClassInfoSp              _info;
-    std::vector<ClassInfoSp> _classes;
+    ClassInfoSp              _info;    // 当前正在解析的类信息
+    std::vector<ClassInfoSp> _classes; // 解析出的类信息
 
-    FuncLimit _currentLimit   = FuncLimit::ePrivate;
-    bool      _inCommentBlock = false;
-    bool      _endAnalyseFun  = true; // 当前函数的信息解析完毕
-    bool      _endFunction    = true; // 当前函数完结（申明、头文件中的实现）
+    LimitType _currentLimit   = LimitType::ePrivate; // 当前行所处权限
+    bool      _inCommentBlock = false;               // 当前行处于块注释中
+    bool      _endAnalyseFun  = true;                // 当前函数的信息解析完毕
+    bool      _endFunction    = true;                // 当前函数完结（声明、头文件中的实现）
 
 public:
     AnalyseHeader(std::string const& contents, SettingSp setting) : _contents(contents), _setting(setting) {}
@@ -81,7 +106,11 @@ public:
 
 private:
     // 匹配类名
-    static std::string analyseClassName(std::string const& line);
+    static std::string analyseClassName(std::string const& line, LimitType& limit);
+
+    // 匹配成员变量
+    static VariableInfoSp analyseVariableInfo(std::string const& oneLine, LimitType limit);
+
     // 匹配函数名、参数、返回值及其修饰符
     static bool analyseFunction(std::string const& line, FunctionInfoSp& fun, bool& endFunction, bool& endFun);
     static void modifyFunctionReturn(std::string& funReturn, FunctionInfoSp& fun);
@@ -89,26 +118,18 @@ private:
     // 跳过注释、空白行等
     static bool skipLine(std::string const& line, bool skipOperator, bool& commentBlock);
     // 匹配函数的权限
-    static bool checkLimit(std::string const& line, FuncLimit& limit);
+    static bool checkLimit(std::string const& line, LimitType& limit);
+
+    static void inFunctionImplement(std::string const& line, bool& endFun);
 };
 
 namespace sindy
 {
-
 static bool isName(char ch)
 { // 字母、数字、下划线
     if (('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z') || ('0' <= ch && ch <= '9') || ch == '_')
         return true;
     return false;
-}
-
-inline std::string trimSpaces(std::string const& str)
-{
-    // size_t start = str.find_first_not_of(" ");
-    // size_t end   = str.find_last_not_of(" ");
-    // return str.substr(start, end - start + 1);
-
-    return {};
 }
 
 inline std::string trimFrontSpaces(std::string const& str)
@@ -210,6 +231,9 @@ inline std::string removeAnnotation(std::string const& oneLine)
         line = oneLine.substr(0, pos);
         break;
     }
+
+    if (line.empty())
+        return line;
 
     pos         = 0;
     size        = arr.size();

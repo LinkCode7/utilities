@@ -121,4 +121,8 @@ void MainWindow::onClickRun()
 
     _runButton->setText("run");
     _runButton->setEnabled(true);
+
+    QMessageBox messageBox(this);
+    messageBox.setText("analyse end.");
+    messageBox.exec();
 }

@@ -3,7 +3,6 @@
 #include <regex>
 
 #define SPLIT_CHAR '\n'
-#define TEST_DATA_DIR "../unittest/data/"
 
 void AnalyseHeader::execute()
 {
@@ -27,6 +26,8 @@ void AnalyseHeader::execute()
 void AnalyseHeader::_execute(std::string const& oneLine)
 {
     auto line = sindy::removeAnnotation(oneLine);
+    line      = sindy::trimFrontSpaces(line);
+    line      = sindy::trimBackSpaces(line);
 
     if (_info)
     {
@@ -34,8 +35,9 @@ void AnalyseHeader::_execute(std::string const& oneLine)
         {
             if (auto end = line.rfind('}'); end == std::string::npos)
                 return;
-            else
-                _endFunction = true;
+
+            _endFunction   = true;
+            _endAnalyseFun = true;
         }
 
         // 类结束标志
@@ -46,8 +48,16 @@ void AnalyseHeader::_execute(std::string const& oneLine)
             return;
         }
 
+        inFunctionImplement(line, _endFunction);
+
         if (skipLine(line, _setting->_skipOperator, _inCommentBlock))
         {
+            if (auto variable = analyseVariableInfo(line, _currentLimit); variable)
+            {
+                _info->_member.emplace_back(variable);
+                return;
+            }
+
             checkLimit(line, _currentLimit);
             return;
         }
@@ -62,7 +72,7 @@ void AnalyseHeader::_execute(std::string const& oneLine)
     }
     else
     {
-        if (auto name = analyseClassName(line); !name.empty())
+        if (auto name = analyseClassName(line, _currentLimit); !name.empty())
         {
             _info             = std::make_shared<ClassInfo>();
             _info->_className = name;
@@ -70,7 +80,7 @@ void AnalyseHeader::_execute(std::string const& oneLine)
     }
 }
 
-std::string AnalyseHeader::analyseClassName(std::string const& line)
+std::string AnalyseHeader::analyseClassName(std::string const& line, LimitType& limit)
 {
     // "class Arc2d : public Geometry" "class GTEST_API_ AssertionResult"
     if (line.find("enum") != std::string::npos)
@@ -89,12 +99,17 @@ std::string AnalyseHeader::analyseClassName(std::string const& line)
     {
         keyLength = 6;
         pos       = line.find("struct");
+        limit     = LimitType::ePublic;
     }
 
     if (pos == std::string::npos)
         return {};
 
     if (pos > 1 && sindy::isName(line[pos - 1])) // 必须是单词边界
+        return {};
+
+    // 类的申明:"class Object"
+    if (line.rfind(';') != std::string::npos)
         return {};
 
     // 模板"template <class Impl>"
@@ -196,19 +211,19 @@ bool AnalyseHeader::analyseFunction(std::string const& line, FunctionInfoSp& fun
         break;
     }
 
-    int funBegin  = left - index;
-    fun->_funName = line.substr(funBegin, index);
+    int funBegin = left - index;
+    fun->_name   = line.substr(funBegin, index);
 
     // 返回值
-    fun->_funReturn = line.substr(0, funBegin);
-    modifyFunctionReturn(fun->_funReturn, fun);
+    fun->_return = line.substr(0, funBegin);
+    modifyFunctionReturn(fun->_return, fun);
 
     auto right = line.find(')');
     if (right != std::string::npos)
     {
         endAnalyse = true;
         // 参数
-        fun->_funParams = line.substr(left + 1, right - left - 1);
+        fun->_params = line.substr(left + 1, right - left - 1);
 
         // 函数const
         if (auto theConst = line.find("const", right); theConst != std::string::npos)
@@ -290,7 +305,7 @@ bool AnalyseHeader::skipLine(std::string const& line, bool skipOperator, bool& i
         return true;
 
     // 跳过非函数申明的行
-    if (line.rfind(";") == std::string::npos && line[size - 1] != ')')
+    if (line.rfind("(") == std::string::npos)
         return true;
 
     // 跳过注释
@@ -318,7 +333,7 @@ bool AnalyseHeader::skipLine(std::string const& line, bool skipOperator, bool& i
     return false;
 }
 
-bool AnalyseHeader::checkLimit(std::string const& line, FuncLimit& limit)
+bool AnalyseHeader::checkLimit(std::string const& line, LimitType& limit)
 {
     if (line.rfind(':') == std::string::npos)
         return false;
@@ -327,29 +342,120 @@ bool AnalyseHeader::checkLimit(std::string const& line, FuncLimit& limit)
 
     if (str.find("public") == 0)
     {
-        limit = FuncLimit::ePublic;
+        limit = LimitType::ePublic;
         return true;
     }
     if (str.find("protected") == 0)
     {
-        limit = FuncLimit::eProtected;
+        limit = LimitType::eProtected;
         return true;
     }
     if (str.find("private") == 0)
     {
-        limit = FuncLimit::ePrivate;
+        limit = LimitType::ePrivate;
         return true;
     }
     return false;
 }
 
-void ClassInfo::funcNameCount(std::map<std::string, int>& names)
+void AnalyseHeader::inFunctionImplement(std::string const& line, bool& endFun)
+{
+    auto left = line.rfind('{');
+    if (left == std::string::npos)
+        return;
+
+    if (line.find('(') != std::string::npos || line.find("const") != std::string::npos ||
+        line.find("bool") != std::string::npos || line.find("int") != std::string::npos ||
+        line.find("double") != std::string::npos || line.find("operator") != std::string::npos)
+    {
+        // maybeFun = true;
+    }
+    else
+    {
+        if (line.size() == 1)
+            return; // 类的第二行
+    }
+
+    if (auto right = line.rfind('}'); right != std::string::npos)
+    {
+        if (right > left)
+            return;
+    }
+    endFun = false;
+}
+
+// 假定变量不换行，假定已删除行尾空格
+VariableInfoSp AnalyseHeader::analyseVariableInfo(std::string const& oneLine, LimitType limit)
+{
+    if (oneLine.find('(') != std::string::npos)
+        return nullptr;
+
+    auto size = oneLine.size();
+    if (size == 0)
+        return nullptr;
+
+    if (oneLine[size - 1] != ';')
+        return nullptr;
+
+    std::string line(oneLine);
+
+    auto variable = std::make_shared<VariableInfo>(limit);
+    auto pos      = line.find("static");
+    if (pos != std::string::npos)
+    {
+        line = line.replace(pos, 6, "");
+        variable->addFlag(VariableInfo::eStaticVariable);
+    }
+
+    pos = line.find("const");
+    if (pos != std::string::npos)
+    {
+        line = line.replace(pos, 5, "");
+        variable->addFlag(VariableInfo::eConstVariable);
+    }
+
+    // 开始分割
+
+    int begin = 0;
+    // "std::map<int, int> _xxx;"
+    if (line.find('<') != std::string::npos)
+    {
+        if (auto r = line.rfind('>'); r != std::string::npos)
+            begin = r + 1;
+    }
+
+    line = sindy::trimFrontSpaces(line);
+    pos  = oneLine.find(' ', begin);
+    if (pos == std::string::npos)
+        return nullptr;
+
+    variable->_type = line.substr(0, pos);
+
+    std::string name = line.substr(pos + 1, (size - 1) - (pos + 1));
+    if (auto assign = name.find('='); assign != std::string::npos)
+    {
+        variable->_name    = name.substr(0, assign - 1);
+        variable->_default = name.substr(assign + 1, (size - 2) - (assign + 1));
+    }
+    else
+    {
+        variable->_name = name;
+    }
+
+    variable->_name    = sindy::trimFrontSpaces(variable->_name);
+    variable->_name    = sindy::trimBackSpaces(variable->_name);
+    variable->_default = sindy::trimFrontSpaces(variable->_default);
+    variable->_default = sindy::trimBackSpaces(variable->_default);
+    return variable;
+}
+
+void ClassInfo::funcNameCount(std::map<std::string, int>& names) const
 {
     for (auto const& fun : _func)
     {
-        auto iter = names.find(fun->_funName);
+        auto iter = names.find(fun->_name);
         if (iter == names.end())
-            names[fun->_funName] = 1;
+            names[fun->_name] = 1;
         else
             iter->second++;
     }
@@ -357,12 +463,12 @@ void ClassInfo::funcNameCount(std::map<std::string, int>& names)
 
 std::string FunctionInfo::simplifyParams() const
 {
-    int size = _funParams.size();
+    int size = _params.size();
 
     bool firstNotFind = true;
 
     int begin = 0;
-    int end   = _funParams.find(',');
+    int end   = _params.find(',');
     if (end == std::string::npos)
     {
         end == size;
@@ -372,7 +478,7 @@ std::string FunctionInfo::simplifyParams() const
     std::stringstream ss;
     while (end <= size)
     {
-        auto param = _funParams.substr(begin, end - begin);
+        auto param = _params.substr(begin, end - begin);
         param      = sindy::trimFrontSpaces(param);
         param      = sindy::trimBackSpaces(param);
         int len    = param.size();
@@ -395,7 +501,7 @@ std::string FunctionInfo::simplifyParams() const
             ss << ", ";
 
         begin = end + 1;
-        end   = _funParams.find(',', end + 1);
+        end   = _params.find(',', end + 1);
 
         if (end == std::string::npos)
         {
@@ -417,8 +523,8 @@ std::string FunctionInfo::simplifyFun() const
 {
     std::stringstream ss;
     if (hasFlag(eConstFunction))
-        ss << _funReturn << '(' << simplifyParams() << ')' << "const";
+        ss << _return << '(' << simplifyParams() << ')' << "const";
     else
-        ss << _funReturn << '(' << simplifyParams() << ')';
+        ss << _return << '(' << simplifyParams() << ')';
     return ss.str();
 }

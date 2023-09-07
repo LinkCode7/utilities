@@ -38,6 +38,8 @@
 *.opendb
 *.sdf
 .vs
+*.ilk
+*.pdb
 
 *.user
 Debug

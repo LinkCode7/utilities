@@ -6,8 +6,8 @@
 
 ### AnalyseCppHeader
 
-- 一个简易的用于分析 C++头文件的工具，它将分析出类名、函数返回值、参数及众多修饰符，支持分析权限、const、&、virtual、static、inline 等
-- 该工具并不完善，需要根据实际用途修改，核心代码在 analyse.h/analyse.cc。
+- 一个简易的用于分析 C++头文件的工具，它将分析出类名、成员变量、函数返回值、参数及众多修饰符
+- 该工具并不完善，没有使用专业的代码分析框架，需要根据实际用途修改，核心代码在 analyse.h/analyse.cc。
 - WriteToEmbind.cc 中包含一个生成 embind 导出代码的示例
 
 ### Webassembly

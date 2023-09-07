@@ -10,7 +10,7 @@ std::string WriteToEmbind::execute(std::string const& strPath)
     if (!fs::is_directory(path))
     {
         auto name(path.filename().string());
-        _execute(path.string(), name, name);
+        _execute(path.string(), name, name + "bind"); // 后缀变长
         return {};
     }
 
@@ -80,11 +80,11 @@ void WriteToEmbind::writeTo(AnalyseHeader const& object, std::stringstream& ss)
 
         for (auto const& fun : info->_func)
         {
-            if (fun->_funLimit != FuncLimit::ePublic)
+            if (fun->_limit != LimitType::ePublic)
                 continue;
 
             // 构造函数
-            if (fun->_funReturn.empty())
+            if (fun->_return.empty())
             {
                 ss << ".constructor<" << fun->simplifyParams() << ">()\n";
                 continue;
@@ -95,18 +95,18 @@ void WriteToEmbind::writeTo(AnalyseHeader const& object, std::stringstream& ss)
             else
                 ss << ".function(\""; // 成员函数
 
-            auto iter = names.find(fun->_funName);
+            auto iter = names.find(fun->_name);
             if (iter == names.end())
                 continue; // error
 
             if (iter->second == 1)
             {
-                ss << fun->_funName << "\", &" << info->_className << "::" << fun->_funName << ")\n";
+                ss << fun->_name << "\", &" << info->_className << "::" << fun->_name << ")\n";
             }
             else
             {
-                ss << fun->_funName << "\", emscripten::select_overload<" << fun->simplifyFun() << ">(&" << info->_className
-                   << "::" << fun->_funName << "))\n";
+                ss << fun->_name << "\", emscripten::select_overload<" << fun->simplifyFun() << ">(&" << info->_className
+                   << "::" << fun->_name << "))\n";
             }
         }
 
