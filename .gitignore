@@ -40,11 +40,15 @@
 .vs
 *.ilk
 *.pdb
+*.wasm
+Project.js
+
 
 *.user
 Debug
 Release
 ipch
 out
+build
 #bin
 googletest

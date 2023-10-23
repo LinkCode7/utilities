@@ -44,5 +44,6 @@ Debug
 Release
 ipch
 out
+build
 #bin
 googletest

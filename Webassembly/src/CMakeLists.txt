@@ -22,8 +22,10 @@ aux_source_directory(wasm SRCS)
 #set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "--strip-all  --no-entry --allow-undefined --lto-O2 --demangle --export-all")
 #set_target_properties(client PROPERTIES LINK_FLAGS "-s DEMANGLE_SUPPORT=1 --preload-file ${CMAKE_SOURCE_DIR}/assets --bind")
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --bind")
+
 if (CMAKE_BUILD_TYPE STREQUAL Debug) # 调试信息-sVERBOSE=1
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g --bind")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 else()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")#--emit-symbol-map
 endif()

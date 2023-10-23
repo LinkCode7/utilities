@@ -8,6 +8,7 @@
     <script>
         Module = {};
         Module.onRuntimeInitialized = function () {
+            // 普通调用
             console.log(">>> js call cpp:fibonacci(3) = " + Module._fibonacci(3));
 
             // JS-CPP交换数据：全局变量地址
@@ -34,6 +35,40 @@
              * @brief 通过embind交换数据
              */
             // 1
+            console.log(">>> Module.add(int, int): " + Module.add(1, 1));
+            console.log(">>> Module.add(double, double): " + Module.add(1.1, 1.001));
+            let str = "hello";
+            console.log(">>> Module.largeText(string) result: " + Module.largeText(str));
+
+            let seg = new Module.Segment();
+            let pointer = Module.pointer();
+            console.log(">>> Module.pointer(): " + pointer.num, pointer.distance, pointer.name);
+            pointer.num = -100;
+            console.log(">>> Module.pointer(): " + pointer.num, pointer.distance, pointer.name);
+
+            // 2
+            var myPoint = new Module.Point(10.1, 10.2);
+            myPoint.multiply(10.0);
+            console.log(">>> js get cpp struct Point: x = " + myPoint.x + ", y = " + myPoint.y);
+            myPoint.x = 12;
+            myPoint.y = 20;
+            console.log(">>> js get cpp struct Point: x = " + myPoint.x + ", y = " + myPoint.y);
+            myPoint.delete();
+
+            // 3
+            let objects = Module.getInfoArray();
+            console.log(objects);
+            for (var i = 0; i < objects.size(); ++i) {
+                var obj = objects.get(i);
+                console.log("obj.x:" + obj.x());
+
+                // 注意：这种类似于函数重载的调用形式可能影响性能，js中似乎不直接支持重载
+                obj.x(666); // 错误示范：obj.intValue = 555;这样会修改intValue的源码
+                var ival = obj.x(); // 同上
+                console.log(obj);
+            }
+            // Module._printFirstObject(); // 数据已被修改
+
             var objStruct = Module._getStructObject();
             var intValue = objStruct.num;
             var floatValue = objStruct.distance;
@@ -43,50 +78,6 @@
             // 2.1
             var point = Module._getPoint();
             console.log("JS get CPP struct Point: x = " + point.x + ", y = " + point.y);
-
-            // 2.2
-            var myPoint = new Module.Point(10.1, 10.2);
-            myPoint.multiply(10.0);
-            console.log("JS get CPP struct Point: x = " + myPoint.x + ", y = " + myPoint.y);
-            myPoint.x = 12;
-            myPoint.y = 20;
-            console.log("JS get CPP struct Point: x = " + myPoint.x + ", y = " + myPoint.y);
-            myPoint.delete();
-
-            // 3
-            Module._initTestObject();
-            let objects = Module._getTestObject();
-            console.log(objects);
-            for (var i = 0; i < objects.size(); ++i)
-            {
-                var obj = objects.get(i);
-                console.log("obj.intValue:" + obj.intValue());
-                console.log("obj.doubleValue:" + obj.doubleValue());
-                console.log("obj.stringValue:" + obj.stringValue());
-
-                // 注意：这种类似于函数重载的调用形式可能影响性能，js中似乎不直接支持重载
-                obj.intValue(666); // 错误示范：obj.intValue = 555;这样会修改intValue的源码
-                var ival = obj.intValue(); // 同上
-
-                obj.setDouble(6.66); // 修改C++内存中的数据
-                console.log(">>>afterchange: obj.doubleValue:" + obj.doubleValue());
-                console.log(obj);
-            }
-            Module._printFirstObject(); // 数据已被修改
-
-            // 4
-            var triangle = Module._getTriangleData(1);
-            var vertexs = triangle._vertexs();
-            console.log(vertexs);
-            var strs = triangle._str();
-            console.log(strs);
-            var points = triangle._points();
-            console.log(points);
-            for (var i = 0; i < points.size(); ++i)
-            {
-                console.log("--->points[" + i + "] = {" + points.get(i).x + ", " + points.get(i).y + "}");
-            }
-            triangle.delete();
         }
     </script>
     <script src="./Project.js"></script>
